@@ -1,12 +1,13 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel 
+from pydantic import BaseModel  # Import BaseModel
 import os
 import requests
 import openai
 from PIL import Image
 import io
 from dotenv import load_dotenv
+import tensorflow as tf  # Ensure TensorFlow is imported
 
 load_dotenv()
 
@@ -22,7 +23,6 @@ app.add_middleware(
 )
 
 # Load the model (For demo purposes, replace with actual model load code)
-# model = load_model("path_to_your_model")
 import os
 import gdown
 
@@ -36,9 +36,10 @@ if not os.path.exists(model_path):
 model = tf.keras.models.load_model(model_path)
 
 
-class ImageURL(BaseModel):
+class ImageURL(BaseModel):  # Define BaseModel
     url: str
     occasion: str
+
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(None), image_url: str = Form(None), occasion: str = Form(...)):
@@ -75,11 +76,13 @@ async def predict(file: UploadFile = File(None), image_url: str = Form(None), oc
         "description": description
     }
 
+
 def fetch_asos_recommendations(category, occasion):
     return [
         {"name": "Stylish Jacket", "image": "https://example.com/jacket.jpg", "link": "https://asos.com/jacket"},
         {"name": "Trendy Vest", "image": "https://example.com/vest.jpg", "link": "https://asos.com/vest"}
     ]
+
 
 def fetch_pexels_images(category):
     api_key = os.getenv("PEXELS_API_KEY")
@@ -88,6 +91,7 @@ def fetch_pexels_images(category):
     response = requests.get(url, headers=headers)
     data = response.json()
     return [photo["src"]["medium"] for photo in data["photos"]]
+
 
 def generate_openai_description(category, occasion):
     openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -98,6 +102,7 @@ def generate_openai_description(category, occasion):
         max_tokens=150
     )
     return response.choices[0].text.strip()
+
 
 if __name__ == "__main__":
     import uvicorn
