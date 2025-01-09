@@ -22,6 +22,18 @@ app.add_middleware(
 
 # Load the model (For demo purposes, replace with actual model load code)
 # model = load_model("path_to_your_model")
+import os
+import gdown
+
+model_path = "DRM.keras"
+if not os.path.exists(model_path):
+    print("Downloading model...")
+    url = "https://drive.google.com/uc?id=1XoHKFsjCFDOTdi3t5hTCH4Yw655Ef9vy"
+    gdown.download(url, model_path, quiet=False)
+
+# Load the model
+model = tf.keras.models.load_model(model_path)
+
 
 class ImageURL(BaseModel):
     url: str
