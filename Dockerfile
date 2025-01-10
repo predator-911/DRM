@@ -1,17 +1,24 @@
-# Use official Python runtime as a parent image
-FROM python:3.9-slim
+FROM python:3.12
 
-# Set the working directory in the container
-WORKDIR /app
+# Set the working directory
+WORKDIR /code
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+# Copy and install Python dependencies
+COPY ./requirements.txt /code/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy application files
+COPY . .
 
-# Expose the API port
+# Expose required ports
+EXPOSE 7860
 EXPOSE 8000
 
-# Run the FastAPI app
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Install supervisor for process management
+RUN apt-get update && apt-get install -y supervisor && apt-get clean
+
+# Copy supervisor configuration
+COPY ./supervisord.conf /etc/supervisor/supervisord.conf
+
+# Start supervisord
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
