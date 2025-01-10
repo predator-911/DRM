@@ -1,4 +1,3 @@
-import os
 import tensorflow as tf
 import numpy as np
 import requests
@@ -10,15 +9,6 @@ import openai
 # Initialize FastAPI
 api = FastAPI()
 
-# Allow CORS for frontend
-api.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Load environment variables for API keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
@@ -28,9 +18,9 @@ ASOS_API_KEY = os.getenv("ASOS_API_KEY")
 if not OPENAI_API_KEY or not PEXELS_API_KEY or not ASOS_API_KEY:
     raise ValueError("One or more API keys are missing. Check your environment variables.")
 
-# Load your trained model
-model_path = "DRM.keras"  # Update this to the correct path if deploying
-model = tf.keras.models.load_model(model_path)
+# Load the TFLite model
+interpreter = tf.lite.Interpreter(model_path="DRM_quantised.tflite")
+interpreter.allocate_tensors()
 
 # Define schemas
 class PredictionInput(BaseModel):
@@ -109,14 +99,24 @@ async def predict(input_data: PredictionInput):
     image = tf.image.resize(image, [224, 224]) / 255.0
     image = tf.expand_dims(image, axis=0)
 
-    # Make prediction
-    predictions = model.predict(image)
+    # Set the input tensor for the TFLite model
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+
+    # Set the input tensor with the processed image data
+    interpreter.set_tensor(input_details[0]['index'], image.numpy())
+
+    # Run inference
+    interpreter.invoke()
+
+    # Get the prediction results
+    predictions = interpreter.get_tensor(output_details[0]['index'])
     category_index = np.argmax(predictions[0])
     confidence = float(predictions[0][category_index])
 
     categories = ['MEN-Jackets_Vests', 'MEN-Shirts_Polos', 'WOMEN-Tees_Tanks']
     category = categories[category_index]
-    
+
     # Fetch additional data
     recommendations = fetch_asos_recommendations(category, input_data.occasion)
     trend_images = fetch_trending_images()
@@ -134,4 +134,3 @@ async def predict(input_data: PredictionInput):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(api, host="0.0.0.0", port=8000)
-
