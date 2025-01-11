@@ -20,7 +20,7 @@ if not OPENAI_API_KEY or not PEXELS_API_KEY or not ASOS_API_KEY:
     raise ValueError("One or more API keys are missing. Check your environment variables.")
 
 # Load the TFLite model
-interpreter = tf.lite.Interpreter(model_path="DRM_quantised.tflite")
+interpreter = tf.lite.Interpreter(model_path="DRM_quantized.tflite")
 interpreter.allocate_tensors()
 
 # Define schemas
