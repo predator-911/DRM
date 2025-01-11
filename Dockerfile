@@ -1,24 +1,17 @@
-FROM python:3.12
+# Use Python 3.9 as the base image
+FROM python:3.9
 
 # Set the working directory
-WORKDIR /code
+WORKDIR /app
 
-# Copy and install Python dependencies
-COPY ./requirements.txt /code/requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+# Copy project files
+COPY . /app
 
-# Copy application files
-COPY . .
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose required ports
-EXPOSE 7860
+# Expose the port
 EXPOSE 8000
 
-# Install supervisor for process management
-RUN apt-get update && apt-get install -y supervisor && apt-get clean
-
-# Copy supervisor configuration
-COPY ./supervisord.conf /etc/supervisor/supervisord.conf
-
-# Start supervisord
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
+# Command to run the app
+CMD ["uvicorn", "api:api", "--host", "0.0.0.0", "--port", "8000"]
