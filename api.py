@@ -6,7 +6,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import openai
-import uvicorn
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 # Initialize FastAPI
 api = FastAPI()
@@ -19,6 +20,19 @@ api.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve static files (like favicon.ico)
+api.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Handle the root path ("/")
+@api.get("/")
+def read_root():
+    return {"message": "Welcome to the Dress Recommendation API!"}
+
+# Handle favicon.ico request
+@api.get("/favicon.ico")
+def get_favicon():
+    return FileResponse("static/favicon.ico")
 
 # Load API keys from environment variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -119,4 +133,5 @@ async def predict(input_data: PredictionInput):
     }
 
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(api, host="0.0.0.0", port=8000)
