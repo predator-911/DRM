@@ -138,6 +138,38 @@ async def predict(input_data: PredictionInput):
         "openai_description": openai_description,
     }
 
+# Debugging endpoint to check model status and environment details
+@api.get("/debug")
+def debug_info():
+    try:
+        # Check if the model is loaded correctly
+        model_status = "Model loaded successfully." if interpreter else "Model not loaded."
+
+        # Check if API keys are set
+        api_keys_status = {
+            "OPENAI_API_KEY": "Set" if OPENAI_API_KEY else "Not set",
+            "PEXELS_API_KEY": "Set" if PEXELS_API_KEY else "Not set",
+            "ASOS_API_KEY": "Set" if ASOS_API_KEY else "Not set",
+        }
+
+        # Additional information, such as environment details or tensor shapes
+        model_input_details = interpreter.get_input_details() if interpreter else "No input details available."
+        model_output_details = interpreter.get_output_details() if interpreter else "No output details available."
+
+        return {
+            "model_status": model_status,
+            "api_keys_status": api_keys_status,
+            "model_input_details": model_input_details,
+            "model_output_details": model_output_details,
+            "environment": {
+                "python_version": os.sys.version,
+                "tensorflow_version": tf.__version__,
+                "fastapi_version": api.__version__,
+            },
+        }
+    except Exception as e:
+        return {"error": f"An error occurred while fetching debug info: {str(e)}"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(api, host="0.0.0.0", port=8000)
