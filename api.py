@@ -6,7 +6,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import openai
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 # Initialize FastAPI
@@ -21,9 +20,6 @@ api.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static files (like favicon.ico)
-api.mount("/static", StaticFiles(directory="static"), name="static")
-
 # Handle the root path ("/")
 @api.get("/")
 def read_root():
@@ -32,7 +28,8 @@ def read_root():
 # Handle favicon.ico request
 @api.get("/favicon.ico")
 def get_favicon():
-    return FileResponse("static/favicon.ico")
+    # Serve the favicon.ico directly from the same directory where the api.py file is located
+    return FileResponse("favicon.ico")
 
 # Load API keys from environment variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
