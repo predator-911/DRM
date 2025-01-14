@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import openai
+import uvicorn
 
 # Initialize FastAPI
 api = FastAPI()
@@ -118,5 +119,4 @@ async def predict(input_data: PredictionInput):
     }
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(api, host="0.0.0.0", port=8000)
