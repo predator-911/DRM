@@ -113,7 +113,16 @@ async def predict(input_data: PredictionInput):
     category_index = np.argmax(predictions[0])
     confidence = float(predictions[0][category_index])
 
-    categories = ['MEN-Jackets_Vests', 'MEN-Shirts_Polos', 'WOMEN-Tees_Tanks']
+    categories = [
+    ('WOMEN', 'Tees_Tanks'), ('WOMEN', 'Blouses_Shirts'), ('WOMEN', 'Dresses'),
+    ('WOMEN', 'Skirts'), ('MEN', 'Pants'), ('WOMEN', 'Sweaters'),
+    ('WOMEN', 'Shorts'), ('WOMEN', 'Sweatshirts_Hoodies'), ('WOMEN', 'Jackets_Coats'),
+    ('WOMEN', 'Denim'), ('WOMEN', 'Graphic_Tees'), ('MEN', 'Tees_Tanks'),
+    ('MEN', 'Suiting'), ('WOMEN', 'Pants'), ('MEN', 'Shorts'), ('MEN', 'Sweaters'),
+    ('WOMEN', 'Cardigans'), ('MEN', 'Jackets_Vests'), ('WOMEN', 'Rompers_Jumpsuits'),
+    ('MEN', 'Sweatshirts_Hoodies'), ('MEN', 'Shirts_Polos'), ('WOMEN', 'Leggings'),
+    ('MEN', 'Denim')
+    ]
     category = categories[category_index]
 
     # Fetch additional details
