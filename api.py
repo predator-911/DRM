@@ -14,7 +14,7 @@ api = FastAPI()
 # CORS Middleware
 api.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://huggingface.co/spaces/Predator911/Front"],  # Allow all origins (use specific domains in production)
+    allow_origins=["*"],  # Allow all origins (use specific domains in production)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
