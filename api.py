@@ -2,11 +2,13 @@ import os
 import tensorflow as tf
 import numpy as np
 import requests
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import openai
 from fastapi.responses import FileResponse
+from io import BytesIO
+from PIL import Image as PILImage
 
 # Initialize FastAPI
 api = FastAPI()
@@ -23,7 +25,7 @@ api.add_middleware(
 # Handle the root path ("/")
 @api.get("/")
 def read_root():
-    return {"message": "Welcome to the Dress Recommendation API!"}
+    return {"message": "Welcome to the Dress Recommendation APP!"}
 
 # Handle favicon.ico request
 @api.get("/favicon.ico")
@@ -47,7 +49,6 @@ interpreter.allocate_tensors()
 
 # Define request and response schemas
 class PredictionInput(BaseModel):
-    image_url: str
     occasion: str
 
 class PredictionOutput(BaseModel):
@@ -90,22 +91,23 @@ def generate_openai_description(category, occasion):
 
 # Prediction API endpoint
 @api.post("/predict", response_model=PredictionOutput)
-async def predict(input_data: PredictionInput):
-    # Fetch the image
-    response = requests.get(input_data.image_url)
-    if response.status_code != 200:
-        raise HTTPException(status_code=400, detail="Failed to fetch image")
-    image_data = response.content
+async def predict(input_data: PredictionInput, image: UploadFile = File(...)):
+    # Read image bytes from the upload
+    image_data = await image.read()
 
-    # Preprocess the image
-    image = tf.image.decode_image(image_data, channels=3)
-    image = tf.image.resize(image, [224, 224]) / 255.0
-    image = tf.expand_dims(image, axis=0)
+    # Convert image to a format that can be processed by TensorFlow
+    pil_image = PILImage.open(BytesIO(image_data))
+    pil_image = pil_image.convert("RGB")  # Ensure image is in RGB mode
+    pil_image = pil_image.resize((224, 224))  # Resize image to fit model input size
+    
+    # Convert the image to a numpy array and normalize it
+    image_array = np.array(pil_image) / 255.0
+    image_array = np.expand_dims(image_array, axis=0)  # Add batch dimension
 
     # Run the TFLite model
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
-    interpreter.set_tensor(input_details[0]['index'], image.numpy())
+    interpreter.set_tensor(input_details[0]['index'], image_array.astype(np.float32))
     interpreter.invoke()
 
     # Get predictions
@@ -113,6 +115,7 @@ async def predict(input_data: PredictionInput):
     category_index = np.argmax(predictions[0])
     confidence = float(predictions[0][category_index])
 
+    # Categories
     categories = [
         ('WOMEN', 'Tees_Tanks'), ('WOMEN', 'Blouses_Shirts'), ('WOMEN', 'Dresses'),
         ('WOMEN', 'Skirts'), ('MEN', 'Pants'), ('WOMEN', 'Sweaters'),
