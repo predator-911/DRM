@@ -32,18 +32,16 @@ def get_favicon():
 
 # Load API keys from environment variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
-ASOS_API_KEY = os.getenv("ASOS_API_KEY")
 
-# Ensure keys are available
-if not OPENAI_API_KEY or not PEXELS_API_KEY or not ASOS_API_KEY:
-    raise ValueError("One or more API keys are missing. Check your environment variables.")
+# Ensure the key is available
+if not OPENAI_API_KEY:
+    raise ValueError("API key is missing. Check your environment variables.")
 
 # Load the TensorFlow Lite model
 model_path = os.path.abspath("DRM_quantized.tflite")  # Use the correct model name
 if not os.path.exists(model_path):
     raise FileNotFoundError(f"Model file not found at {model_path}")
-    
+
 interpreter = tf.lite.Interpreter(model_path=model_path)
 interpreter.allocate_tensors()
 
@@ -55,31 +53,30 @@ class PredictionInput(BaseModel):
 class PredictionOutput(BaseModel):
     category: str
     confidence: float
-    recommendations: list
-    trend_images: list
+    openai_image: str
     openai_description: str
 
-# Helper functions
-def fetch_trending_images():
-    headers = {"Authorization": PEXELS_API_KEY}
-    response = requests.get("https://api.pexels.com/v1/curated", headers=headers, params={"per_page": 5})
-    if response.status_code == 200:
-        return [img["src"]["medium"] for img in response.json().get("photos", [])]
-    return []
+# Helper function to generate fashion-forward images using OpenAI's DALL·E
+def generate_openai_image(category, occasion):
+    openai.api_key = OPENAI_API_KEY
+    prompt = f"A stylish and fashionable {category} outfit for a {occasion}. The design should be modern and appealing."
+    
+    try:
+        response = openai.Image.create(
+            prompt=prompt,
+            n=1,
+            size="1024x1024"
+        )
+        image_url = response['data'][0]['url']
+        return image_url
+    except Exception as e:
+        return f"Error generating image: {e}"
 
-def fetch_asos_recommendations(category, occasion):
-    headers = {"Authorization": ASOS_API_KEY}
-    response = requests.get(
-        f"https://api.asos.com/recommendations/{category}?occasion={occasion}", headers=headers
-    )
-    if response.status_code == 200:
-        items = response.json().get("items", [])
-        return [{"name": item["name"], "image": item["imageUrl"]} for item in items]
-    return []
-
+# Helper function to generate descriptions using OpenAI's GPT-3
 def generate_openai_description(category, occasion):
     openai.api_key = OPENAI_API_KEY
     prompt = f"Provide a detailed fashion-forward description for {category} outfits suitable for a {occasion}."
+    
     try:
         response = openai.Completion.create(
             engine="text-davinci-003",
@@ -128,16 +125,14 @@ async def predict(input_data: PredictionInput):
     ]
     category = categories[category_index]
 
-    # Fetch additional details
-    recommendations = fetch_asos_recommendations(category, input_data.occasion)
-    trend_images = fetch_trending_images()
+    # Generate OpenAI content
     openai_description = generate_openai_description(category, input_data.occasion)
+    openai_image = generate_openai_image(category, input_data.occasion)
 
     return {
         "category": category,
         "confidence": confidence,
-        "recommendations": recommendations,
-        "trend_images": trend_images,
+        "openai_image": openai_image,
         "openai_description": openai_description,
     }
 
