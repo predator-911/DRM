@@ -1,107 +1,146 @@
-import requests
+import os
 import tensorflow as tf
 import numpy as np
+import requests
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List
+import openai
+from fastapi.responses import FileResponse
 
-app = FastAPI()
+# Initialize FastAPI
+api = FastAPI()
 
-# Define your schemas
+# CORS Middleware
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (use specific domains in production)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Handle the root path ("/")
+@api.get("/")
+def read_root():
+    return {"message": "Welcome to the Dress Recommendation API!"}
+
+# Handle favicon.ico request
+@api.get("/favicon.ico")
+def get_favicon():
+    return FileResponse("favicon.ico")
+
+# Load API keys from environment variables
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
+ASOS_API_KEY = os.getenv("ASOS_API_KEY")
+
+# Ensure keys are available
+if not OPENAI_API_KEY or not PEXELS_API_KEY or not ASOS_API_KEY:
+    raise ValueError("One or more API keys are missing. Check your environment variables.")
+
+# Load the TensorFlow Lite model
+model_path = os.path.abspath("DRM_quantized.tflite")  # Use the correct model name
+if not os.path.exists(model_path):
+    raise FileNotFoundError(f"Model file not found at {model_path}")
+    
+interpreter = tf.lite.Interpreter(model_path=model_path)
+interpreter.allocate_tensors()
+
+# Define request and response schemas
 class PredictionInput(BaseModel):
-    image_url: str  # URL of the image
-    occasion: str    # Occasion for the clothing (e.g., "formal", "casual")
+    image_url: str
+    occasion: str
 
 class PredictionOutput(BaseModel):
     category: str
     confidence: float
-    recommendations: List[str]
-    trend_images: List[str]
+    recommendations: list
+    trend_images: list
     openai_description: str
 
-# Initialize the TFLite model
-interpreter = tf.lite.Interpreter(model_path="model.tflite")
-interpreter.allocate_tensors()
-
-# Category list for the model (Ensure this is correct)
-categories = [
-    ('WOMEN', 'Tees_Tanks'), ('WOMEN', 'Blouses_Shirts'), ('WOMEN', 'Dresses'),
-    ('WOMEN', 'Skirts'), ('MEN', 'Pants'), ('WOMEN', 'Sweaters'),
-    ('WOMEN', 'Shorts'), ('WOMEN', 'Sweatshirts_Hoodies'), ('WOMEN', 'Jackets_Coats'),
-    ('WOMEN', 'Denim'), ('WOMEN', 'Graphic_Tees'), ('MEN', 'Tees_Tanks'),
-    ('MEN', 'Suiting'), ('WOMEN', 'Pants'), ('MEN', 'Shorts'), ('MEN', 'Sweaters'),
-    ('WOMEN', 'Cardigans'), ('MEN', 'Jackets_Vests'), ('WOMEN', 'Rompers_Jumpsuits'),
-    ('MEN', 'Sweatshirts_Hoodies'), ('MEN', 'Shirts_Polos'), ('WOMEN', 'Leggings'),
-    ('MEN', 'Denim')
-]
-
-# Placeholder functions for fetching recommendations, trend images, and OpenAI description
-def fetch_asos_recommendations(category, occasion):
-    # Mock recommendation data
-    return [
-        f"Recommendation 1 for {category} during {occasion}",
-        f"Recommendation 2 for {category} during {occasion}",
-        f"Recommendation 3 for {category} during {occasion}"
-    ]
-
+# Helper functions
 def fetch_trending_images():
-    # Mock trending image data
-    return [
-        "https://example.com/trending_image1.jpg",
-        "https://example.com/trending_image2.jpg",
-        "https://example.com/trending_image3.jpg"
-    ]
+    headers = {"Authorization": PEXELS_API_KEY}
+    response = requests.get("https://api.pexels.com/v1/curated", headers=headers, params={"per_page": 5})
+    if response.status_code == 200:
+        return [img["src"]["medium"] for img in response.json().get("photos", [])]
+    return []
+
+def fetch_asos_recommendations(category, occasion):
+    headers = {"Authorization": ASOS_API_KEY}
+    response = requests.get(
+        f"https://api.asos.com/recommendations/{category}?occasion={occasion}", headers=headers
+    )
+    if response.status_code == 200:
+        items = response.json().get("items", [])
+        return [{"name": item["name"], "image": item["imageUrl"]} for item in items]
+    return []
 
 def generate_openai_description(category, occasion):
-    # Mock OpenAI description
-    return f"Description for {category} based on {occasion}."
-
-# FastAPI POST endpoint for prediction
-@app.post("/predict", response_model=PredictionOutput)
-async def predict(input_data: PredictionInput):
+    openai.api_key = OPENAI_API_KEY
+    prompt = f"Provide a detailed fashion-forward description for {category} outfits suitable for a {occasion}."
     try:
-        # Logging the input data for debugging purposes
-        print(f"Received input data: {input_data}")
-
-        # Fetch the image using the URL
-        response = requests.get(input_data.image_url)
-        if response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to fetch image")
-        
-        image_data = response.content
-
-        # Preprocess the image
-        image = tf.image.decode_image(image_data, channels=3)
-        image = tf.image.resize(image, [224, 224]) / 255.0
-        image = tf.expand_dims(image, axis=0)
-
-        # Run the TFLite model for prediction
-        input_details = interpreter.get_input_details()
-        output_details = interpreter.get_output_details()
-        interpreter.set_tensor(input_details[0]['index'], image.numpy())
-        interpreter.invoke()
-
-        # Get predictions
-        predictions = interpreter.get_tensor(output_details[0]['index'])
-        category_index = np.argmax(predictions[0])
-        confidence = float(predictions[0][category_index])
-
-        # Determine the predicted category
-        category = categories[category_index]
-
-        # Fetch recommendations based on the prediction and occasion
-        recommendations = fetch_asos_recommendations(category, input_data.occasion)
-        trend_images = fetch_trending_images()
-        openai_description = generate_openai_description(category, input_data.occasion)
-
-        # Return the predicted output
-        return {
-            "category": category,
-            "confidence": confidence,
-            "recommendations": recommendations,
-            "trend_images": trend_images,
-            "openai_description": openai_description,
-        }
-    
+        response = openai.Completion.create(
+            engine="text-davinci-003",
+            prompt=prompt,
+            max_tokens=100,
+            temperature=0.7,
+        )
+        return response.choices[0].text.strip()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        return f"Error generating description: {e}"
+
+# Prediction API endpoint
+@api.post("/predict", response_model=PredictionOutput)
+async def predict(input_data: PredictionInput):
+    # Fetch the image
+    response = requests.get(input_data.image_url)
+    if response.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to fetch image")
+    image_data = response.content
+
+    # Preprocess the image
+    image = tf.image.decode_image(image_data, channels=3)
+    image = tf.image.resize(image, [224, 224]) / 255.0
+    image = tf.expand_dims(image, axis=0)
+
+    # Run the TFLite model
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    interpreter.set_tensor(input_details[0]['index'], image.numpy())
+    interpreter.invoke()
+
+    # Get predictions
+    predictions = interpreter.get_tensor(output_details[0]['index'])
+    category_index = np.argmax(predictions[0])
+    confidence = float(predictions[0][category_index])
+
+    categories = [
+        ('WOMEN', 'Tees_Tanks'), ('WOMEN', 'Blouses_Shirts'), ('WOMEN', 'Dresses'),
+        ('WOMEN', 'Skirts'), ('MEN', 'Pants'), ('WOMEN', 'Sweaters'),
+        ('WOMEN', 'Shorts'), ('WOMEN', 'Sweatshirts_Hoodies'), ('WOMEN', 'Jackets_Coats'),
+        ('WOMEN', 'Denim'), ('WOMEN', 'Graphic_Tees'), ('MEN', 'Tees_Tanks'),
+        ('MEN', 'Suiting'), ('WOMEN', 'Pants'), ('MEN', 'Shorts'), ('MEN', 'Sweaters'),
+        ('WOMEN', 'Cardigans'), ('MEN', 'Jackets_Vests'), ('WOMEN', 'Rompers_Jumpsuits'),
+        ('MEN', 'Sweatshirts_Hoodies'), ('MEN', 'Shirts_Polos'), ('WOMEN', 'Leggings'),
+        ('MEN', 'Denim')
+    ]
+    category = categories[category_index]
+
+    # Fetch additional details
+    recommendations = fetch_asos_recommendations(category, input_data.occasion)
+    trend_images = fetch_trending_images()
+    openai_description = generate_openai_description(category, input_data.occasion)
+
+    return {
+        "category": category,
+        "confidence": confidence,
+        "recommendations": recommendations,
+        "trend_images": trend_images,
+        "openai_description": openai_description,
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(api, host="0.0.0.0", port=8000)
