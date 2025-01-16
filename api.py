@@ -30,7 +30,11 @@ def read_root():
 # Handle favicon.ico request
 @api.get("/favicon.ico")
 def get_favicon():
-    return FileResponse("favicon.ico")
+    try:
+        return FileResponse("favicon.ico")
+    except Exception as e:
+        print(f"Error serving favicon: {str(e)}")
+        raise HTTPException(status_code=404, detail="Favicon not found")
 
 # Load API keys from environment variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -71,6 +75,7 @@ def generate_openai_image(category, occasion):
         image_url = response['data'][0]['url']
         return image_url
     except Exception as e:
+        print(f"Error generating image with OpenAI: {e}")
         return f"Error generating image: {e}"
 
 # Helper function to generate descriptions using OpenAI's GPT-3
@@ -87,57 +92,63 @@ def generate_openai_description(category, occasion):
         )
         return response.choices[0].text.strip()
     except Exception as e:
+        print(f"Error generating description with OpenAI: {e}")
         return f"Error generating description: {e}"
 
 # Prediction API endpoint
 @api.post("/predict", response_model=PredictionOutput)
 async def predict(input_data: PredictionInput, image: UploadFile = File(...)):
-    # Read image bytes from the upload
-    image_data = await image.read()
+    try:
+        # Read image bytes from the upload
+        image_data = await image.read()
 
-    # Convert image to a format that can be processed by TensorFlow
-    pil_image = PILImage.open(BytesIO(image_data))
-    pil_image = pil_image.convert("RGB")  # Ensure image is in RGB mode
-    pil_image = pil_image.resize((224, 224))  # Resize image to fit model input size
-    
-    # Convert the image to a numpy array and normalize it
-    image_array = np.array(pil_image) / 255.0
-    image_array = np.expand_dims(image_array, axis=0)  # Add batch dimension
+        # Convert image to a format that can be processed by TensorFlow
+        pil_image = PILImage.open(BytesIO(image_data))
+        pil_image = pil_image.convert("RGB")  # Ensure image is in RGB mode
+        pil_image = pil_image.resize((224, 224))  # Resize image to fit model input size
+        
+        # Convert the image to a numpy array and normalize it
+        image_array = np.array(pil_image) / 255.0
+        image_array = np.expand_dims(image_array, axis=0)  # Add batch dimension
 
-    # Run the TFLite model
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    interpreter.set_tensor(input_details[0]['index'], image_array.astype(np.float32))
-    interpreter.invoke()
+        # Run the TFLite model
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        interpreter.set_tensor(input_details[0]['index'], image_array.astype(np.float32))
+        interpreter.invoke()
 
-    # Get predictions
-    predictions = interpreter.get_tensor(output_details[0]['index'])
-    category_index = np.argmax(predictions[0])
-    confidence = float(predictions[0][category_index])
+        # Get predictions
+        predictions = interpreter.get_tensor(output_details[0]['index'])
+        category_index = np.argmax(predictions[0])
+        confidence = float(predictions[0][category_index])
 
-    # Categories
-    categories = [
-        ('WOMEN', 'Tees_Tanks'), ('WOMEN', 'Blouses_Shirts'), ('WOMEN', 'Dresses'),
-        ('WOMEN', 'Skirts'), ('MEN', 'Pants'), ('WOMEN', 'Sweaters'),
-        ('WOMEN', 'Shorts'), ('WOMEN', 'Sweatshirts_Hoodies'), ('WOMEN', 'Jackets_Coats'),
-        ('WOMEN', 'Denim'), ('WOMEN', 'Graphic_Tees'), ('MEN', 'Tees_Tanks'),
-        ('MEN', 'Suiting'), ('WOMEN', 'Pants'), ('MEN', 'Shorts'), ('MEN', 'Sweaters'),
-        ('WOMEN', 'Cardigans'), ('MEN', 'Jackets_Vests'), ('WOMEN', 'Rompers_Jumpsuits'),
-        ('MEN', 'Sweatshirts_Hoodies'), ('MEN', 'Shirts_Polos'), ('WOMEN', 'Leggings'),
-        ('MEN', 'Denim')
-    ]
-    category = categories[category_index]
+        # Categories
+        categories = [
+            ('WOMEN', 'Tees_Tanks'), ('WOMEN', 'Blouses_Shirts'), ('WOMEN', 'Dresses'),
+            ('WOMEN', 'Skirts'), ('MEN', 'Pants'), ('WOMEN', 'Sweaters'),
+            ('WOMEN', 'Shorts'), ('WOMEN', 'Sweatshirts_Hoodies'), ('WOMEN', 'Jackets_Coats'),
+            ('WOMEN', 'Denim'), ('WOMEN', 'Graphic_Tees'), ('MEN', 'Tees_Tanks'),
+            ('MEN', 'Suiting'), ('WOMEN', 'Pants'), ('MEN', 'Shorts'), ('MEN', 'Sweaters'),
+            ('WOMEN', 'Cardigans'), ('MEN', 'Jackets_Vests'), ('WOMEN', 'Rompers_Jumpsuits'),
+            ('MEN', 'Sweatshirts_Hoodies'), ('MEN', 'Shirts_Polos'), ('WOMEN', 'Leggings'),
+            ('MEN', 'Denim')
+        ]
+        category = categories[category_index]
 
-    # Generate OpenAI content
-    openai_description = generate_openai_description(category, input_data.occasion)
-    openai_image = generate_openai_image(category, input_data.occasion)
+        # Generate OpenAI content
+        openai_description = generate_openai_description(category, input_data.occasion)
+        openai_image = generate_openai_image(category, input_data.occasion)
 
-    return {
-        "category": category,
-        "confidence": confidence,
-        "openai_image": openai_image,
-        "openai_description": openai_description,
-    }
+        return {
+            "category": category,
+            "confidence": confidence,
+            "openai_image": openai_image,
+            "openai_description": openai_description,
+        }
+
+    except Exception as e:
+        print(f"Error in prediction: {str(e)}")
+        raise HTTPException(status_code=500, detail="An error occurred while processing the request.")
 
 if __name__ == "__main__":
     import uvicorn
